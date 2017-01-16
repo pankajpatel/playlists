@@ -1,0 +1,19 @@
+{
+  "name": "playlists",
+  "version": "1.0.0",
+  "description": "Get/Share Spotify Playlists in open",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pankajpatel/playlists.git"
+  },
+  "author": "patel.pankaj@live.in (http://pankaj.pro)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/pankajpatel/playlists/issues"
+  },
+  "homepage": "https://github.com/pankajpatel/playlists#readme"
+}
