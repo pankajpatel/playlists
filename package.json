@@ -6,7 +6,8 @@
   "scripts": {
     "postinstall": "npm run build",
     "start": "node server/index.js",
-    "build": "webpack --progress --watch"
+    "build": "webpack --progress",
+    "watch": "npm run build -- --watch"
   },
   "repository": {
     "type": "git",
@@ -20,16 +21,16 @@
   "homepage": "https://github.com/pankajpatel/playlists#readme",
   "dependencies": {
     "bell": "^8.5.0",
+    "dotenv": "^4.0.0",
     "hapi": "^16.1.0",
     "inert": "^4.1.0",
     "joi": "^10.2.1",
-    "vision": "^4.1.1",
-
     "normalize.css": "^4.2.0",
     "react": "^15.3.1",
     "react-dom": "^15.3.1",
     "react-router": "^2.8.1",
     "react-tap-event-plugin": "^1.0.0",
+    "vision": "^4.1.1",
     "wreck": "^10.0.0"
   },
   "devDependencies": {
