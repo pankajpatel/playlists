@@ -4,6 +4,7 @@ const Hapi = require('hapi');
 const Inert = require('inert');
 
 const config = require('../config');
+const handlers = require('./lib');
 
 // Create a server with a host and port
 
@@ -20,7 +21,17 @@ const errorHandler = err => {
 
 // Register/Add the plugins/modules
 server.register([
-  Inert
+  Inert,
+  {
+    register: require('yar'),
+    options: {
+      storeBlank: false,
+      cookieOptions: {
+        password: 'the-password-must-be-at-least-32-characters-long',
+        isSecure: true
+      }
+    }
+  }
 ], errorHandler);
 
 
@@ -62,6 +73,21 @@ server.route([
         index: true
       }
     }
+  },
+  { // path:/authenticate
+    method: 'GET',
+    path: '/authenticate',
+    handler: handlers.authenticate
+  },
+  { // path:/callback
+    method: 'GET',
+    path: '/callback',
+    handler: handlers.callback
+  },
+  { // path:/refresh
+    method: 'GET',
+    path: '/refresh',
+    handler: handlers.refresh
   }
 ]);
 

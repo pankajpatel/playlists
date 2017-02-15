@@ -1,15 +1,17 @@
 require('dotenv').load();
+const Wreck = require('wreck');
+const querystring = require('querystring');
 
-var client_id = process.env.CLIENT_ID; // Your client id
-var client_secret = process.env.CLIENT_SECRET; // Your secret
-var redirect_uri = process.env.REDIRECT_URI; // Your redirect uri
+const client_id = process.env.CLIENT_ID; // Your client id
+const client_secret = process.env.CLIENT_SECRET; // Your secret
+const redirect_uri = process.env.REDIRECT_URI; // Your redirect uri
 
 /**
  * Generates a random string containing numbers and letters
  * @param  {number} length The length of the string
  * @return {string} The generated string
  */
-var generateRandomString = function(length) {
+const generateRandomString = function(length) {
   var text = '';
   var possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -19,21 +21,17 @@ var generateRandomString = function(length) {
   return text;
 };
 
-var stateKey = 'spotify_auth_state';
+const stateKey = 'spotify_auth_state';
 
-var app = express();
-
-app.use(express.static(__dirname + '/public'))
-   .use(cookieParser());
-
-app.get('/login', function(req, res) {
+const authenticate = function(request, reply) {
 
   var state = generateRandomString(16);
-  res.cookie(stateKey, state);
+
+  request.yar.set(stateKey, state);
 
   // your application requests authorization
   var scope = 'user-read-private user-read-email';
-  res.redirect('https://accounts.spotify.com/authorize?' +
+  reply.redirect('https://accounts.spotify.com/authorize?' +
     querystring.stringify({
       response_type: 'code',
       client_id: client_id,
@@ -41,24 +39,24 @@ app.get('/login', function(req, res) {
       redirect_uri: redirect_uri,
       state: state
     }));
-});
+};
 
-app.get('/callback', function(req, res) {
+const callback = function(request, reply) {
 
   // your application requests refresh and access tokens
   // after checking the state parameter
 
-  var code = req.query.code || null;
-  var state = req.query.state || null;
-  var storedState = req.cookies ? req.cookies[stateKey] : null;
+  var code = request.query.code || null;
+  var state = request.query.state || null;
+  var storedState = request.yar.get(stateKey) || null;
 
   if (state === null || state !== storedState) {
-    res.redirect('/#' +
+    reply.redirect('/#/error?' +
       querystring.stringify({
         error: 'state_mismatch'
       }));
   } else {
-    res.clearCookie(stateKey);
+    request.yar.clear(stateKey);
     var authOptions = {
       url: 'https://accounts.spotify.com/api/token',
       form: {
@@ -72,7 +70,7 @@ app.get('/callback', function(req, res) {
       json: true
     };
 
-    request.post(authOptions, function(error, response, body) {
+    Wreck.post(authOptions.url, authOptions, function(error, response, body) {
       if (!error && response.statusCode === 200) {
 
         var access_token = body.access_token,
@@ -85,27 +83,27 @@ app.get('/callback', function(req, res) {
         };
 
         // use the access token to access the Spotify Web API
-        request.get(options, function(error, response, body) {
+        Wreck.get(options.url, options, function(error, response, body) {
           console.log(body);
         });
 
         // we can also pass the token to the browser to make requests from there
-        res.redirect('/#' +
+        reply.redirect('/#' +
           querystring.stringify({
             access_token: access_token,
             refresh_token: refresh_token
           }));
       } else {
-        res.redirect('/#' +
+        reply.redirect('/#/error?' +
           querystring.stringify({
             error: 'invalid_token'
           }));
       }
     });
   }
-});
+}
 
-app.get('/refresh_token', function(req, res) {
+const refresh = function(request, reply) {
 
   // requesting access token from refresh token
   var refresh_token = req.query.refresh_token;
@@ -119,12 +117,16 @@ app.get('/refresh_token', function(req, res) {
     json: true
   };
 
-  request.post(authOptions, function(error, response, body) {
+  Wreck.post(authOptions.url, authOptions, function(error, response, body) {
     if (!error && response.statusCode === 200) {
       var access_token = body.access_token;
-      res.send({
+      reply({
         'access_token': access_token
       });
     }
   });
-});
+}
+
+module.exports = {
+  authenticate, callback, refresh
+}

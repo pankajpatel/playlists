@@ -1,6 +1,7 @@
 import App from '../App';
 import Home from '../components/pages/Home';
 import Login from '../components/pages/Login';
+import Error from '../components/pages/Error';
 
 function shouldBeLoggedIn(nextState, replace) {
   // const status = getLoginStatus(); //From the State manager
@@ -42,6 +43,9 @@ const rootRoute = {
       path: 'login',
       component: Login,
       onEnter: shouldNotBeLoggedIn
+    }, {
+      path: 'error',
+      component: Error
     }
   ]
 }
