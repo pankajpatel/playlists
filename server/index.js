@@ -1,16 +1,33 @@
 'use strict';
 
 const Hapi = require('hapi');
+const Wreck = require('wreck');
 const Inert = require('inert');
 
-const config = require('../config');
-const handlers = require('./lib');
+require('dotenv').load();
+const Bell = require('../../bell');
 
+const config = require('../config');
+// const handlers = require('./lib');
+
+// console.log(Bell.providers.spotify)
+
+const client_id = process.env.CLIENT_ID; // Your client id
+const client_secret = process.env.CLIENT_SECRET; // Your secret
+const redirect_uri = process.env.REDIRECT_URI; // Your redirect uri
 // Create a server with a host and port
 
 const server = new Hapi.Server();
 server.connection(config.server);
 
+server.state('data', {
+  ttl: null,
+  isSecure: true,
+  isHttpOnly: true,
+  encoding: 'base64json',
+  clearInvalid: false, // remove invalid cookies
+  strictHeader: true // don't allow violations of RFC 6265
+});
 
 const errorHandler = err => {
   if (err) {
@@ -18,6 +35,19 @@ const errorHandler = err => {
   }
 };
 
+//Custom error tapping to puke out nasty errors on console
+const handler = function (request, reply) {
+    const response = request.response;
+    if (!response.isBoom) {
+      return reply.continue();
+    }
+    console.log(request.response, request.response.statusCode);
+    const error = response;
+    error.output.payload.custom = 'Key';
+    return reply(error);
+};
+
+server.ext('onPreResponse', handler);
 
 // Register/Add the plugins/modules
 server.register([
@@ -31,9 +61,85 @@ server.register([
         isSecure: true
       }
     }
+  },
+  {
+    register: require('hapi-mongodb'),
+    options: config.db
   }
 ], errorHandler);
 
+// Register bell with the server
+server.register([require('hapi-auth-cookie'), Bell], function (err) {
+
+    //Setup the session strategy
+    server.auth.strategy('session', 'cookie', {
+        password: 'secret_cookie_encryption_password', //Use something more secure in production
+        redirectTo: '/auth/spotify', //If there is no session, redirect here
+        isSecure: false //Should be set to true (which is the default) in production
+    });
+
+    server.auth.strategy('spotify', 'bell', {
+        provider: 'spotify',
+        password: 'secret_cookie_encryption_password',
+        clientId: client_id,
+        clientSecret: client_secret,
+        isSecure: false
+    });
+    server.route([
+      {
+        method: ['GET', 'POST'],
+        path: '/auth/spotify',
+        config: {
+          auth: 'spotify',
+          handler: function (request, reply) {
+            // console.log(request.auth);
+            if (!request.auth.isAuthenticated) {
+              return reply('Authentication failed due to: ' + request.auth.error.message);
+            }
+
+            var db = request.server.plugins['hapi-mongodb'].db;
+
+            var authCredentials = request.auth.credentials;
+
+            db.collection('config').updateOne({"spotify-token": request.auth.credentials.token}, authCredentials, {upsert: true}, (err, result) => {
+              if(err) return reply(Boom.internal('Internal MongoDB error', err));
+            });
+            request.yar.set('spotify', { token: request.auth.credentials.token });
+            console.log(request.yar)
+            return reply.redirect('/home');
+          }
+        }
+      },
+      {
+        method: 'GET',
+        path: '/home',
+        config: {
+          handler: function(request, reply) {
+            var token = null;
+            console.log(request.yar)
+            //if( request.yar.get('spotify') != undefined){
+              var db = request.server.plugins['hapi-mongodb'].db;
+              db.collection('config').findOne({'spotify-token':'*'}, function (err, result) {
+                if(err) return reply(Boom.internal('Internal MongoDB error', err));
+
+                if(result && typeof result.token != 'undefined' ) {
+                  token = result.token;
+                } else {
+                  return reply.redirect('/auth/spotify');
+                }
+              })
+            //} else {
+            //  token = request.yar.get('spotify').token;
+            //}
+            Wreck.get('https://api.spotify.com/v1/me', { headers: { 'Authorization': 'BEARER ' + token } }, function (data, response) {
+              console.log(data);
+              reply(data);
+            });
+          }
+        }
+      }
+    ]);
+});
 
 // Add the routes
 
@@ -73,21 +179,6 @@ server.route([
         index: true
       }
     }
-  },
-  { // path:/authenticate
-    method: 'GET',
-    path: '/authenticate',
-    handler: handlers.authenticate
-  },
-  { // path:/callback
-    method: 'GET',
-    path: '/callback',
-    handler: handlers.callback
-  },
-  { // path:/refresh
-    method: 'GET',
-    path: '/refresh',
-    handler: handlers.refresh
   }
 ]);
 

@@ -1,10 +1,21 @@
 require('dotenv').load();
-const Wreck = require('wreck');
 const querystring = require('querystring');
+const Wreck = require('wreck');
+const Bell = require('../../bell');
+console.log(Bell)
+const SpotifyWebApi = require('spotify-web-api-node');
 
 const client_id = process.env.CLIENT_ID; // Your client id
 const client_secret = process.env.CLIENT_SECRET; // Your secret
 const redirect_uri = process.env.REDIRECT_URI; // Your redirect uri
+
+// credentials are optional
+var spotifyApi = new SpotifyWebApi({
+  clientId: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  redirectUri: process.env.REDIRECT_URI
+});
+
 
 /**
  * Generates a random string containing numbers and letters
@@ -43,64 +54,19 @@ const authenticate = function(request, reply) {
 
 const callback = function(request, reply) {
 
-  // your application requests refresh and access tokens
-  // after checking the state parameter
-
   var code = request.query.code || null;
   var state = request.query.state || null;
   var storedState = request.yar.get(stateKey) || null;
-
-  if (state === null || state !== storedState) {
-    reply.redirect('/#/error?' +
-      querystring.stringify({
-        error: 'state_mismatch'
-      }));
-  } else {
-    request.yar.clear(stateKey);
-    var authOptions = {
-      url: 'https://accounts.spotify.com/api/token',
-      form: {
-        code: code,
-        redirect_uri: redirect_uri,
-        grant_type: 'authorization_code'
-      },
-      headers: {
-        'Authorization': 'Basic ' + (new Buffer(client_id + ':' + client_secret).toString('base64'))
-      },
-      json: true
-    };
-
-    Wreck.post(authOptions.url, authOptions, function(error, response, body) {
-      if (!error && response.statusCode === 200) {
-
-        var access_token = body.access_token,
-            refresh_token = body.refresh_token;
-
-        var options = {
-          url: 'https://api.spotify.com/v1/me',
-          headers: { 'Authorization': 'Bearer ' + access_token },
-          json: true
-        };
-
-        // use the access token to access the Spotify Web API
-        Wreck.get(options.url, options, function(error, response, body) {
-          console.log(body);
-        });
-
-        // we can also pass the token to the browser to make requests from there
-        reply.redirect('/#' +
-          querystring.stringify({
-            access_token: access_token,
-            refresh_token: refresh_token
-          }));
-      } else {
-        reply.redirect('/#/error?' +
-          querystring.stringify({
-            error: 'invalid_token'
-          }));
-      }
+  console.log(code)
+  spotifyApi.setAccessToken(code);
+  // Get the authenticated user
+  spotifyApi.getMe()
+    .then(function(data) {
+      reply(data.body);
+      console.log('Some information about the authenticated user', data.body);
+    }, function(err) {
+      console.log('Something went wrong!', err);
     });
-  }
 }
 
 const refresh = function(request, reply) {

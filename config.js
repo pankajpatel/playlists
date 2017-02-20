@@ -1,5 +1,6 @@
 const path = require('path');
 const outputDir = 'public';
+require('dotenv').load();
 
 module.exports = {
   server: {
@@ -19,6 +20,9 @@ module.exports = {
         relativeTo: path.join(__dirname, outputDir)
       }
     }
+  },
+  db: {
+    url: process.env.MONGODB
   },
   ui: {
     title: 'Playlists',
