@@ -4,6 +4,7 @@ logs
 npm-debug.log*
 .env
 public
+.DS_Store
 
 # Runtime data
 pids
