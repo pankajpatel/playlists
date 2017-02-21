@@ -116,10 +116,11 @@ server.register([require('hapi-auth-cookie'), Bell], function (err) {
         config: {
           handler: function(request, reply) {
             var token = null;
-            console.log(request.yar)
-            //if( request.yar.get('spotify') != undefined){
+            if( request.yar.get('spotify') === undefined || request.yar.get('spotify') === null){
+              console.log('Get Token from DB:'+token+'\n\n\n');
+
               var db = request.server.plugins['hapi-mongodb'].db;
-              db.collection('config').findOne({'spotify-token':'*'}, function (err, result) {
+              db.collection('config').findOne({'provider':'spotify'}, function (err, result) {
                 if(err) return reply(Boom.internal('Internal MongoDB error', err));
 
                 if(result && typeof result.token != 'undefined' ) {
@@ -128,12 +129,13 @@ server.register([require('hapi-auth-cookie'), Bell], function (err) {
                   return reply.redirect('/auth/spotify');
                 }
               })
-            //} else {
-            //  token = request.yar.get('spotify').token;
-            //}
-            Wreck.get('https://api.spotify.com/v1/me', { headers: { 'Authorization': 'BEARER ' + token } }, function (data, response) {
-              console.log(data);
-              reply(data);
+            } else {
+             token = request.yar.get('spotify').token;
+            }
+            console.log('Token:'+token+'\n\n\n');
+            Wreck.get('https://api.spotify.com/v1/me', { headers: { 'Authorization': 'BEARER ' + token } }, function (err, response, payload) {
+              console.log(payload);
+              return reply(payload);
             });
           }
         }
