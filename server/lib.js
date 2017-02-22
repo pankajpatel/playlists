@@ -1,98 +1,113 @@
 require('dotenv').load();
-const querystring = require('querystring');
-const Wreck = require('wreck');
 const Bell = require('../../bell');
-console.log(Bell)
 const SpotifyWebApi = require('spotify-web-api-node');
+const config = require('../config');
 
-const client_id = process.env.CLIENT_ID; // Your client id
-const client_secret = process.env.CLIENT_SECRET; // Your secret
-const redirect_uri = process.env.REDIRECT_URI; // Your redirect uri
+let Plugin = {};
+Plugin.register = function(server, options, next) {
 
-// credentials are optional
-var spotifyApi = new SpotifyWebApi({
-  clientId: process.env.CLIENT_ID,
-  clientSecret: process.env.CLIENT_SECRET,
-  redirectUri: process.env.REDIRECT_URI
-});
-
-
-/**
- * Generates a random string containing numbers and letters
- * @param  {number} length The length of the string
- * @return {string} The generated string
- */
-const generateRandomString = function(length) {
-  var text = '';
-  var possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-  for (var i = 0; i < length; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
-};
-
-const stateKey = 'spotify_auth_state';
-
-const authenticate = function(request, reply) {
-
-  var state = generateRandomString(16);
-
-  request.yar.set(stateKey, state);
-
-  // your application requests authorization
-  var scope = 'user-read-private user-read-email';
-  reply.redirect('https://accounts.spotify.com/authorize?' +
-    querystring.stringify({
-      response_type: 'code',
-      client_id: client_id,
-      scope: scope,
-      redirect_uri: redirect_uri,
-      state: state
-    }));
-};
-
-const callback = function(request, reply) {
-
-  var code = request.query.code || null;
-  var state = request.query.state || null;
-  var storedState = request.yar.get(stateKey) || null;
-  console.log(code)
-  spotifyApi.setAccessToken(code);
-  // Get the authenticated user
-  spotifyApi.getMe()
-    .then(function(data) {
-      reply(data.body);
-      console.log('Some information about the authenticated user', data.body);
-    }, function(err) {
-      console.log('Something went wrong!', err);
-    });
-}
-
-const refresh = function(request, reply) {
-
-  // requesting access token from refresh token
-  var refresh_token = req.query.refresh_token;
-  var authOptions = {
-    url: 'https://accounts.spotify.com/api/token',
-    headers: { 'Authorization': 'Basic ' + (new Buffer(client_id + ':' + client_secret).toString('base64')) },
-    form: {
-      grant_type: 'refresh_token',
-      refresh_token: refresh_token
-    },
-    json: true
-  };
-
-  Wreck.post(authOptions.url, authOptions, function(error, response, body) {
-    if (!error && response.statusCode === 200) {
-      var access_token = body.access_token;
-      reply({
-        'access_token': access_token
-      });
-    }
+  var spotifyApi = new SpotifyWebApi({
+    clientId: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    redirectUri: process.env.REDIRECT_URI
   });
+  server.register([{
+        register: require('yar'),
+        options: {
+          storeBlank: false,
+          cookieOptions: {
+            password: process.env.COOKIE_PASSWORD,
+            isSecure: true
+          }
+        }
+      }, {
+        register: require('hapi-mongodb'),
+        options: config.db
+      },
+      require('hapi-auth-cookie'),
+      Bell
+    ], function (err) {
+
+      //Setup the session strategy
+      server.auth.strategy('session', 'cookie', {
+          password: 'secret_cookie_encryption_password', //Use something more secure in production
+          redirectTo: '/auth/spotify', //If there is no session, redirect here
+          isSecure: false //Should be set to true (which is the default) in production
+      });
+
+      server.auth.strategy('spotify', 'bell', {
+          provider: 'spotify',
+          password: process.env.COOKIE_PASSWORD,
+          clientId: process.env.CLIENT_ID,
+          clientSecret: process.env.CLIENT_SECRET,
+          isSecure: false
+      });
+      server.route([
+        {
+          method: ['GET', 'POST'],
+          path: '/auth/spotify',
+          config: {
+            auth: 'spotify',
+            handler: function (request, reply) {
+              // console.log(request.auth);
+              if (!request.auth.isAuthenticated) {
+                return reply('Authentication failed due to: ' + request.auth.error.message);
+              }
+
+              var db = request.server.plugins['hapi-mongodb'].db;
+
+              var authCredentials = request.auth.credentials;
+
+              db.collection('config').updateOne({"provider": "spotify"}, authCredentials, {upsert: true}, (err, result) => {
+                if(err) return reply(Boom.internal('Internal MongoDB error', err));
+              });
+              request.yar.set('spotify', { token: request.auth.credentials.token });
+              return reply.redirect('/home');
+            }
+          }
+        },
+        {
+          method: 'GET',
+          path: '/home',
+          config: {
+            handler: function(request, reply) {
+              var token = null;
+              if( request.yar.get('spotify') === undefined || request.yar.get('spotify') === null){
+                var db = request.server.plugins['hapi-mongodb'].db;
+                db.collection('config').findOne({'provider':'spotify'}, function (err, result) {
+                  if(err){
+                    return reply(Boom.internal('Internal MongoDB error', err));
+                  }
+                  if(result && typeof result.token != 'undefined' ) {
+                    token = result.token;
+                    spotifyApi.setAccessToken(token);
+                    spotifyApi.getMe()
+                      .then(function(data) {
+                        console.log('Some information about the authenticated user', data.body);
+                        return reply(data.body);
+                      }, function(err) {
+                        console.log('Something went wrong!', err);
+                        return reply(Boom.internal('Internal MongoDB error', err));
+                      });
+                  } else {
+                    return reply.redirect('/auth/spotify');
+                  }
+                })
+              } else {
+                token = request.yar.get('spotify').token;
+                return get(token, reply);
+              }
+            }
+          }
+        }
+      ]);
+      next();
+    }
+  );
 }
 
-module.exports = {
-  authenticate, callback, refresh
-}
+Plugin.register.attributes = {
+  pkg: require('../package')
+};
+
+module.exports = Plugin;
