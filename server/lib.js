@@ -62,13 +62,13 @@ Plugin.register = function(server, options, next) {
                 if(err) return reply(Boom.internal('Internal MongoDB error', err));
               });
               request.yar.set('spotify', { token: request.auth.credentials.token });
-              return reply.redirect('/home');
+              return reply.redirect('/');
             }
           }
         },
         {
           method: 'GET',
-          path: '/home',
+          path: '/api/user',
           config: {
             handler: function(request, reply) {
               var token = null;
