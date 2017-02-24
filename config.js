@@ -1,8 +1,9 @@
 const path = require('path');
 const outputDir = 'public';
 require('dotenv').load();
+const config = require('./config.ui');
 
-module.exports = {
+module.exports = Object.assign({
   server: {
     host: '127.0.0.1',
     port: 8080,
@@ -23,13 +24,5 @@ module.exports = {
   },
   db: {
     url: process.env.MONGODB
-  },
-  ui: {
-    title: 'Playlists',
-    srcDir: 'src',
-    entry: 'js/index.js',
-    outputDir: outputDir,
-    outputFile: 'js/app.bundle.js', //relative to outputDir
-    preprocessor: 'scss' //or 'less'
   }
-}
+}, config);

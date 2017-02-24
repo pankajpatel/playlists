@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router';
-import config from 'root/config'
+import config from 'root/config.ui'
 export default class Header extends React.Component {
   constructor(props) {
     super(props);
